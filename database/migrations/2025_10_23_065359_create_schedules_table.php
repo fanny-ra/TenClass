@@ -21,7 +21,7 @@ return new class extends Migration
             $table->foreignId('room_id')->constrained('rooms')->onDelete('cascade');
             $table->string('description')->nullable();
             $table->boolean('recurring')->default(false);
-            $table->string('recurring_type')->nullable(); // pekanan, bulanan, dll
+            $table->string('recurring_type')->nullable(); // pekanan, bulanan, atau harian
             $table->string('status')->default('pending');
             $table->timestamps();
         });

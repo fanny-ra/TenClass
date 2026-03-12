@@ -2,19 +2,15 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ScheduleController;
-use App\Http\Controllers\SchedulesController;
 use App\Http\Controllers\StudyGroupController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| HOME
+| AUTH ROUTES (Login & Register)
 |--------------------------------------------------------------------------
 */
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
-
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
@@ -23,23 +19,44 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
 });
 
+/*
+|--------------------------------------------------------------------------
+| PROTECTED ROUTES (Login Required)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth')->group(function () {
 
-    // logout
+    // Dashboard Utama
+    Route::get('/', [ScheduleController::class, 'index'])->name('home');
+
+    // Logout
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::resource('studygroups', StudyGroupController::class);
+
+    Route::get('/profile', [UserController::class, 'profileEdit'])->name('profile.edit');
+    Route::put('/profile', [UserController::class, 'profileUpdate'])->name('profile.update');
+
+    /*
+    |----------------------------------------------------------------------
+    | FITUR PEMINJAMAN (Murid/Guru)
+    |----------------------------------------------------------------------
+    */
+    Route::get('/peminjaman-saya', [ScheduleController::class, 'mySchedules'])->name('schedules.mine');
 
     Route::resource('schedules', ScheduleController::class);
+    /*
+    |----------------------------------------------------------------------
+    | KHUSUS ACC (Sarpras & OSIS)
+    |----------------------------------------------------------------------
+    */
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::resource('studygroups', StudyGroupController::class);
 
-    // approval peminjaman (khusus sarpras)
-    Route::put('/schedules/{schedule}/approve', [ScheduleController::class, 'approve'])
-        ->name('schedules.approve');
-
-    Route::put('/schedules/{schedule}/reject', [ScheduleController::class, 'reject'])
-        ->name('schedules.reject');
-
-    // pengembalian / selesai
-    Route::put('/schedules/{schedule}/return', [ScheduleController::class, 'returnRoom'])
-        ->name('schedules.return');
+        Route::controller(ScheduleController::class)->group(function () {
+            Route::get('/antrean', 'antreanIndex')->name('antrean');
+            Route::put('/schedules/{schedule}/approve', 'approve')->name('schedules.approve');
+            Route::put('/schedules/{schedule}/reject', 'reject')->name('schedules.reject');
+            Route::put('/schedules/{schedule}/return', 'returnRoom')->name('schedules.return');
+    });
+});
 
 });

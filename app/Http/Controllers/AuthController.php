@@ -7,98 +7,83 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
-    /**
-     * Menampilkan form pendaftaran.
-     */
+
     public function showRegistrationForm()
     {
-        // Di sini Anda bisa memuat StudyGroup dan data lain untuk form
         $studyGroups = \App\Models\StudyGroup::all();
         return view('auth.register', compact('studyGroups'));
     }
 
-    /**
-     * Menyimpan data user baru (Pendaftaran).
-     */
-public function register(Request $request)
-{
-    // 1. Validasi input
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users',
-        'password' => 'required|string|min:8|confirmed',
-        'role' => 'required|in:murid,guru', // hanya murid atau guru
-        'study_groups_id' => 'nullable|exists:study_groups,id',
-    ]);
-
-    try {
-        // 2. Buat user baru
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'is_sarpras' => false,  // otomatis
-            'is_osis' => false,     // otomatis
-            'study_groups_id' => $request->study_groups_id ?? null,
+    public function register(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8|confirmed',
+            'role' => 'required|in:murid,guru',
+            'study_groups_id' => 'nullable|exists:study_groups,id',
         ]);
 
-        // 3. Debug: cek data user
-        // dd($user); // aktifkan kalau mau pastiin data terbentuk
+        try {
+            // Gunakan variabel agar bisa dicek jika gagal
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => $request->role,
+                'is_sarpras' => false,
+                'is_osis' => false,
+                'study_groups_id' => $request->study_groups_id,
+            ]);
 
-        // 4. Auto-login
-        Auth::login($user);
+            if ($user) {
+                // Redirect ke login dengan pesan sukses
+                return redirect()->route('login')->with('success', 'Registrasi berhasil! Silakan login.');
+            }
 
-        return redirect()->route('home')->with('success', 'Pendaftaran berhasil! Selamat datang.');
+        } catch (\Exception $e) {
+            // Log error untuk debug (cek storage/logs/laravel.log)
 
-    } catch (\Exception $e) {
-        // Tangani error
-        return back()->withInput()->withErrors([
-            'error' => 'Gagal mendaftar. Cek input atau hubungi admin.'
-        ]);
+            logger("Register Error: " . $e->getMessage());
+
+            return back()->withInput()->withErrors([
+                'error' => 'Gagal mendaftar: ' . $e->getMessage()
+            ]);
+        }
     }
-}
 
-
-
-    /**
-     * Menampilkan form Login.
-     */
     public function showLoginForm()
     {
-        return view('login');
+        return view('auth.login');
     }
 
-    /**
-     * Memproses permintaan login.
-     */
     public function login(Request $request)
     {
-        // 1. Validasi input
         $credentials = $request->validate([
-            'name' => ['required', 'string'],
+            'email'    => ['required', 'email'], // Pakai email, bukan name
             'password' => ['required', 'string'],
+        ], [
+            'email.required'    => 'Emailnya diisi dulu ya!',
+            'email.email'       => 'Format emailnya salah tuh.',
+            'password.required' => 'Password jangan dikosongin.',
         ]);
 
-        // 2. Coba proses autentikasi
+        // proses autentikasi
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
-            // Autentikasi berhasil
             $request->session()->regenerate();
-            return redirect()->intended('/')->with('success', 'Selamat datang kembali!');
+            return redirect()->intended('/')->with('success', 'Hore! Berhasil login. Selamat datang kembali!');
         }
 
-        // 3. Autentikasi gagal
+        // Jika gagal (Email atau Password salah)
         return back()->withErrors([
-            'name' => 'name atau password yang Anda masukkan salah.',
-        ])->onlyInput('name');
+            'email' => 'Duh, email atau password kamu nggak cocok nih di data kita.',
+        ])->withInput($request->only('email'));
     }
 
-    /**
-     * Proses Logout.
-     */
     public function logout(Request $request)
     {
         Auth::logout();

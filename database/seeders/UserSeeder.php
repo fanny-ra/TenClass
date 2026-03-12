@@ -14,11 +14,11 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. ADMIN SARPRAS
+        // ADMIN SARPRAS
         User::create([
             'name' => 'Nurtovingah',
-            'email' => 'sarpras@sekolah.com', // <--- HARUS DITAMBAHKAN
-            'email_verified_at' => now(), // Opsional, tapi bagus untuk kelengkapan
+            'email' => 'sarpras@sekolah.com',
+            'email_verified_at' => now(), 
             'password' => Hash::make('sarpras123'),
             'role' => 'guru',
             'is_sarpras' => true,
@@ -27,10 +27,10 @@ class UserSeeder extends Seeder
             'remember_token' => Str::random(10),
         ]);
 
-        // 2. Pembina OSIS (Role Guru, bukan Sarpras)
+        // Guru biasa atau Pembina Eskul
         User::create([
             'name' => 'Mujahid',
-            'email' => 'mujahid.guru@sekolah.com', // <--- HARUS DITAMBAHKAN
+            'email' => 'mujahid.guru@sekolah.com',
             'email_verified_at' => now(),
             'password' => Hash::make('guru123'),
             'role' => 'guru',
@@ -40,10 +40,10 @@ class UserSeeder extends Seeder
             'remember_token' => Str::random(10),
         ]);
 
-        // 3. Ketua OSIS (Role Murid, is_osis TRUE)
+        // OSIS (Role Murid, is_osis TRUE)
         User::create([
             'name' => 'Husna',
-            'email' => 'husna.osis@sekolah.com', // <--- HARUS DITAMBAHKAN
+            'email' => 'husna.osis@sekolah.com',
             'email_verified_at' => now(),
             'password' => Hash::make('osis123'),
             'role' => 'murid',
@@ -53,10 +53,10 @@ class UserSeeder extends Seeder
             'remember_token' => Str::random(10),
         ]);
 
-        // 4. Murid Biasa (Peminjam)
+        // Murid Biasa (Peminjam)
         User::create([
             'name' => 'Apip (Murid Biasa)',
-            'email' => 'apip@sekolah.com', // <--- HARUS DITAMBAHKAN
+            'email' => 'apip@sekolah.com',
             'email_verified_at' => now(),
             'password' => Hash::make('murid123'),
             'role' => 'murid',

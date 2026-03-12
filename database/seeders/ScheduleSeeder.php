@@ -15,7 +15,7 @@ class ScheduleSeeder extends Seeder
     {
         DB::table('schedules')->insert([
             [
-                'date' => '2025-10-09',
+                'date' => now()->toDateString(),
                 'start_session' => '08:45',
                 'end_session' => '15:00',
                 'type' => 'KBM',
@@ -29,7 +29,7 @@ class ScheduleSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'date' => '2025-10-14',
+                'date' => now()->toDateString(),
                 'start_session' => '15:30',
                 'end_session' => '17:00',
                 'type' => 'Lainnya',

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\StudyGroup;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -70,5 +72,44 @@ class UserController extends Controller
     public function destroy(User $user)
     {
         //
+    }
+
+    public function profileEdit()
+    {
+        // Ambil data user yang lagi login
+        $user = Auth::user();
+        return view('profile.edit', compact('user'));
+}
+
+    public function profileUpdate(Request $request)
+    {
+        $user = Auth::user();
+
+        // Cek ada perubahan data atau ngga
+        $isNoChanges = $request->name === $user->name &&
+                    $request->email === $user->email &&
+                    empty($request->password);
+
+        if ($isNoChanges) {
+            return back()->with('warning', 'Tidak ada data yang diubah.');
+        }
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'password' => ['nullable', 'confirmed', 'min:8'],
+        ]);
+
+        // Update
+        $user->name = $request->name;
+        $user->email = $request->email;
+
+        if ($request->filled('password')) {
+            $user->password = Hash::make($request->password);
+        }
+
+        $user->save();
+
+        return back()->with('success', 'Profil kamu berhasil diperbarui!');
     }
 }

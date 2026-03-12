@@ -6,103 +6,204 @@ use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class ScheduleController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
-{
-    $schedules = Schedule::with(['user', 'room'])->get();
 
-    return response()->json([
-        'success' => true,
-        'data' => $schedules
-    ]);
-}
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function index()
     {
-        $users = User::all();
-        $rooms = Room::all();
+        $user = Auth::user();
+        $now = Carbon::now()->timezone('Asia/Jakarta');
+        $todayDate = $now->toDateString();
+        $currentTime = $now->format('H:i:s');
 
-        return view('schedules.create', compact('users', 'rooms'));
+        // UNTUK AMBIL RUANGAN YANG SUDAH DI-BOOKING HARI INI
+        $busyRoomIds = Schedule::where(function($query) use ($todayDate, $now) {
+                $query->whereDate('date', $todayDate)
+                ->orWhere(function($q) use ($now) {
+                    $q->where('recurring', 1)
+                    ->where('recurring_type', 'pekanan')
+                    ->whereRaw("DAYNAME(date) = ?", [$now->format('l')]);
+                });
+            })
+            ->whereIn('status', ['disetujui', 'pending'])
+            ->where('end_session', '>', $currentTime) // Ruangan ada lagi kalau sesi udh habis
+            ->pluck('room_id')
+            ->unique();
+
+        // Ambil ruangan yang tersedia
+        $availableRooms = Room::whereNotIn('id', $busyRoomIds)->get();
+
+        // JADWAL AKTIF "DIGUNAKAN HARI INI"
+        $activeSchedules = Schedule::with(['user', 'room'])
+            ->where('status', 'disetujui')
+            ->where(function($query) use ($todayDate, $now) {
+                $query->whereDate('date', $todayDate)
+                    ->orWhere(function($q) use ($now) {
+                        $q->where('recurring', 1)
+                        ->where('recurring_type', 'pekanan')
+                        ->whereRaw("DAYNAME(date) = ?", [$now->format('l')]);
+                    });
+            })
+            ->where('end_session', '>', $currentTime)
+            ->orderBy('start_session', 'asc')
+            ->get();
+
+        // ANTREAN PENDING (UNTUK ADMIN & STATUS RUANGAN)
+        $pendingSchedules = Schedule::with(['user', 'room'])
+            ->where('status', 'pending')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // RESPONSE VIEW
+        if (request()->routeIs('home')) {
+            $view = ($user->is_sarpras || $user->is_osis) ? 'admin.dashboard' : 'user.dashboard';
+            return view($view, [
+                'availableRooms' => $availableRooms,
+                'activeSchedules' => $activeSchedules,
+                'pendingSchedules' => $pendingSchedules, 
+                'pendingRequests' => $pendingSchedules,
+                'schedules' => $activeSchedules,
+                'totalAntrean' => $pendingSchedules->count(),
+                'ruanganDigunakan' => $activeSchedules->count(),
+            ]);
+        }
+
+        return view('schedules.index', [
+            'availableRooms' => $availableRooms,
+            'activeSchedules' => $activeSchedules,
+            'pendingSchedules' => $pendingSchedules,
+            'schedules' => $activeSchedules 
+        ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
+
+    public function mySchedules()
+    {
+        $mySchedules = Schedule::with(['room', 'user'])
+            ->where('user_id', Auth::id())
+            ->orderBy('date', 'asc')
+            ->get();
+
+        return view('schedules.my_schedules', compact('mySchedules'));
+    }
+
+    public function create()
+    {
+        $rooms = Room::all();
+        $todayDate = \Carbon\Carbon::now()->timezone('Asia/Jakarta')->toDateString();
+
+        // Ambil jadwal hari ini untuk diinfokan ke user di form
+        $activeSchedules = Schedule::whereDate('date', $todayDate)
+                            ->whereIn('status', ['disetujui', 'pending'])
+                            ->with('room')
+                            ->get();
+
+        return view('schedules.create', compact('rooms', 'activeSchedules'));
+    }
+
     public function store(Request $request)
     {
         $request->validate([
-            'date' => ['required', 'date'],
-            'start_session' => ['required', 'date_format:H:i'],
-            'end_session' => ['required', 'date_format:H:i', 'after:start_session'],
-            'type' => ['required', 'string', Rule::in(['KBM', 'Lainnya'])],
-            'user_id' => ['required', 'exists:users,id'],
-            'room_id' => ['required', 'exists:rooms,id'],
-            'description' => ['nullable', 'string', 'max:500'],
-            'recurring' => ['required', 'boolean'],
-            'recurring_type' => ['nullable', 'string', 'required_if:recurring,true'],
+            'room_id' => 'required',
+            'date' => 'required|date',
+            'start_session' => 'required',
+            'end_session' => 'required|after:start_session',
         ]);
 
+        // Cek Bentrokan Jadwal
+        $isBooked = Schedule::where('room_id', $request->room_id)
+            ->where('date', $request->date)
+            ->whereIn('status', ['disetujui', 'pending'])
+            ->where(function($query) use ($request) {
+                $query->whereBetween('start_session', [$request->start_session, $request->end_session])
+                    ->orWhereBetween('end_session', [$request->start_session, $request->end_session])
+                    ->orWhere(function($q) use ($request) {
+                        $q->where('start_session', '<=', $request->start_session)
+                            ->where('end_session', '>=', $request->end_session);
+                    });
+            })->exists();
+
+        if ($isBooked) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['conflict' => 'Maaf, ruangan akan dipakai untuk jam tersebut (Ekskul/Kegiatan lain). Silakan pilih jam atau ruangan lain.']);
+        }
+
+        // Jika tidak bentrok, simpan data
         Schedule::create([
+            'user_id' => Auth::id(),
+            'room_id' => $request->room_id,
             'date' => $request->date,
             'start_session' => $request->start_session,
             'end_session' => $request->end_session,
-            'type' => $request->type,
-            'user_id' => $request->user_id,
-            'room_id' => $request->room_id,
             'description' => $request->description,
-            'recurring' => $request->boolean('recurring'),
-            'recurring_type' => $request->recurring ? $request->recurring_type : null,
+            'status' => 'pending', // Default status
         ]);
 
-        return redirect()->route(['schedules.store']);
+        return redirect()->route('schedules.index')->with('success', 'Peminjaman berhasil diajukan!');
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Schedule $schedule)
-    {
-         $schedule->load(['user', 'room']);
+    // FUNGSI ACC (Khusus Sarpras)
 
-    return response()->json([
-        'success' => true,
-        'data' => $schedule
-    ]);
+    public function approve(Schedule $schedule)
+    {
+        $user = Auth::user();
+        $roomName = strtoupper($schedule->room->name);
+
+        // Tentukan ruangan khusus
+        $isRestricted = str_contains($roomName, 'AULA') || str_contains($roomName, 'LAB');
+
+        // ACC Aula/Lab tapi bukan Sarpras
+        if ($isRestricted && !$user->is_sarpras) {
+            return back()->with('error', 'Akses Ditolak! Hanya Sarpras yang boleh menyetujui Aula atau Lab.');
+        }
+
+        // untuk OSIS (Hanya boleh RT)
+        if ($user->is_osis && !str_contains($roomName, 'RT')) {
+            return back()->with('error', 'OSIS hanya diperbolehkan menyetujui ruangan kelas (RT).');
+        }
+
+        $schedule->update(['status' => 'disetujui']);
+        return back()->with('success', 'Permohonan berhasil disetujui!');
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Schedule $schedule)
+    public function reject(Schedule $schedule)
     {
-        $users = User::all();
-        $rooms = Room::all();
+        $user = Auth::user();
+        $roomName = strtoupper($schedule->room->name);
+        $isRestricted = str_contains($roomName, 'AULA') || str_contains($roomName, 'LAB');
 
-        return view('schedules.edit', compact('schedule', 'users', 'rooms'));
+        if ($isRestricted && !$user->is_sarpras) {
+            return back()->with('error', 'Akses Ditolak! Hanya Sarpras yang boleh menolak permohonan Aula/Lab.');
+        }
+
+        $schedule->update(['status' => 'ditolak']);
+        return back()->with('error', 'Permohonan telah ditolak.');
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Schedule $schedules)
+    public function antreanIndex()
     {
-        //
-    }
+        $user = Auth::user();
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Schedule $schedules)
-    {
-        //
+        if (!$user->is_sarpras && !$user->is_osis) {
+            abort(403);
+        }
+
+        $query = Schedule::with(['user', 'room'])->where('status', 'pending');
+
+        if ($user->is_osis) {
+            $query->whereHas('room', function($q) {
+                $q->where('name', 'LIKE', 'RT %') // Harus RT
+                ->where('name', 'NOT LIKE', '%AULA%') // Bukan Aula
+                ->where('name', 'NOT LIKE', '%LAB%');  // Bukan Lab
+            });
+        }
+
+        $antrean = $query->orderBy('date', 'asc')->get();
+
+        return view('admin.antrean_list', compact('antrean'));
     }
 }

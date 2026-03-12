@@ -31,15 +31,7 @@ class StudyGroupController extends Controller
      */
     public function store(Request $request)
     {
-        // $request->validate([
-        //     'name' => ['required', 'string', 'max:50', 'unique:studygroup,name']
-        // ]);
-
-        // StudyGroup::create([
-        //     'name' => $request->name
-        // ]);
-
-        // return redirect()->route('studygroups.index')->with('status', 'Kelas berhasil ditambahkan!! ^-^');
+        
     }
 
     /**
@@ -63,15 +55,7 @@ class StudyGroupController extends Controller
      */
     public function update(Request $request, StudyGroup $studyGroup)
     {
-        // $request->validate([
-        //     'name' => ['required', 'string', 'max:50', Rule::unique('studygroups')->ignore($studyGroup->id)]
-        // ]);
-
-        // $studyGroup->update([
-        //     'name' => $request->name,
-        // ]);
-
-        // return redirect()->route('studygroups.show', $studyGroup)->with('status', 'Kelas berhasil di perbarui!!');
+        
     }
 
     /**
@@ -79,8 +63,6 @@ class StudyGroupController extends Controller
      */
     public function destroy(StudyGroup $studyGroup)
     {
-        // $studyGroup->delete();
-
-        // return redirect()->route('studygroups.index')->with('status', 'Kelas berhasil dihapus!!');
+        
     }
 }
